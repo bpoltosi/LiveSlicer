@@ -24,6 +24,7 @@ extern "C" {
 #include <iomanip>
 #include <sstream>
 #include <deque>
+#include <algorithm>
 #include <cmath>
 
 #include <QFile>
@@ -200,7 +201,7 @@ inline static bool loadConfigFile(const QString &path,
 
 
         /// Pre buffering Time
-        config.prebufferingTime = 5.0;
+        config.prebufferingTime = 45.0;
         if (j.contains("pre_buffering_time") && j["pre_buffering_time"].is_number()) {
             config.prebufferingTime = j["pre_buffering_time"].get<float>();
         }

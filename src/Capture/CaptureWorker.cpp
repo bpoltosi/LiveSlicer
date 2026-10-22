@@ -323,6 +323,9 @@ void RtspCaptureThread::run() {
             evp.duration = pkt->duration;
             evp.key = (pkt->flags & AV_PKT_FLAG_KEY) != 0;
             evp.time_base = m_fmtCtx->streams[m_videoStreamIndex]->time_base;
+            evp.received_monotonic_us =
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
             emit videoPacketReady(evp);
 
             // Decode for display

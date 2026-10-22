@@ -24,6 +24,7 @@ extern "C" {
 #include <iomanip>
 #include <sstream>
 #include <deque>
+#include <algorithm>
 #include <cmath>
 
 #include <QFile>
@@ -42,6 +43,8 @@ struct EncodedVideoPacket {
     int64_t duration = 0;
     bool   key = false;
     AVRational time_base{1,1};
+    // Local monotonic receive time, independent of RTSP PTS/DTS resets.
+    int64_t received_monotonic_us = 0;
 };
 
 struct StreamInfo {
@@ -118,7 +121,7 @@ struct AppConfig {
     quint16 httpPort = 8090;
     int displayMode = 0;
     int autostart = 0;
-    float prebufferingTime = 5;
+    float prebufferingTime = 45;
     float postbufferingTime = 0.5;
     QString rec_base_folder = "./";
     int loglevel=0; //0 = few log, 1 = medium, 2=high
@@ -198,7 +201,7 @@ inline static bool loadConfigFile(const QString &path,
 
 
         /// Pre buffering Time
-        config.prebufferingTime = 5.0;
+        config.prebufferingTime = 45.0;
         if (j.contains("pre_buffering_time") && j["pre_buffering_time"].is_number()) {
             config.prebufferingTime = j["pre_buffering_time"].get<float>();
         }

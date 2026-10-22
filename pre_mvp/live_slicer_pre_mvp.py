@@ -25,7 +25,7 @@ def save_clip(frames, trigger_time, duration, fps, output_dir):
     if len(eligible) < 2 or eligible[0][0] > start_time + 1.0:
         raise RuntimeError("Full pre-event buffer is not ready; keep the app running.")
     output_dir.mkdir(parents=True, exist_ok=True)
-    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
     output_path = output_dir / f"live_slicer_{stamp}.mp4"
     first = cv2.imdecode(eligible[0][1], cv2.IMREAD_COLOR)
     if first is None:

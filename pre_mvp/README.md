@@ -19,27 +19,27 @@ The exported MP4 is re-encoded from buffered frames. This is intentional for the
 
 Install:
 
-\`\`\`bash
+```bash
 python -m pip install opencv-python
-\`\`\`
+```
 
 Run from the repository root:
 
-\`\`\`bash
+```bash
 python pre_mvp/live_slicer_pre_mvp.py
-\`\`\`
+```
 
 If the webcam is not camera index 0, try:
 
-\`\`\`bash
+```bash
 python pre_mvp/live_slicer_pre_mvp.py --camera 1
-\`\`\`
+```
 
 Optional settings:
 
-\`\`\`bash
+```bash
 python pre_mvp/live_slicer_pre_mvp.py --duration 45 --fps 20 --width 640 --height 480 --output recordings
-\`\`\`
+```
 
 ## Acceptance test before calling the pre-MVP functional
 

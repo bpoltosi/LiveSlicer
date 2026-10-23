@@ -94,7 +94,7 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
         "-f", "rawvideo", "-pixel_format", "bgr24", "-video_size", f"{width}x{height}",
         "-framerate", str(fps), "-i", "pipe:0", "-an",
         "-c:v", "libx264", "-preset", h264_preset, "-crf", str(h264_crf),
-        "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output_path),
+        "-threads", str(h264_threads), "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(output_path),
     ]
     process = None
     written = 0

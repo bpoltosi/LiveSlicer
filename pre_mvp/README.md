@@ -26,7 +26,7 @@ Video is encoded by the FFmpeg command-line executable using `libx264` and H.264
 - x264 encoder limited to 2 worker threads by default, to leave more CPU headroom for webcam capture and the rest of the computer
 - 512 MiB rolling-buffer memory cap
 
-The `--h264-crf` option accepts values from 0 to 51. As a practical starting point, CRF 18 is high quality; CRF 20–23 generally reduces file size at some quality cost. CRF 0 is not a guarantee of lossless capture end-to-end because webcam acquisition and the in-memory JPEG buffer are already lossy. The `--h264-preset` option controls encoding speed/compression efficiency: slower presets can reduce file size at similar CRF but use more CPU and take longer to export. The default `veryfast` preset was selected after target-machine testing showed noticeably lower CPU usage with nearly unchanged perceived quality and file size. The `--h264-threads` option caps x264 worker threads (default `2`) so encoding is less likely to monopolize the CPU; this can make exports take longer, which is intentional to protect live capture and overall responsiveness. Export runs in a background thread, although JPEG compression and decoding can still compete with capture for CPU time.
+The `--h264-crf` option accepts values from 0 to 51. As a practical starting point, CRF 18 is high quality; CRF 20–23 generally reduces file size at some quality cost. CRF 0 is not a guarantee of lossless capture end-to-end because webcam acquisition and the in-memory JPEG buffer are already lossy. The `--h264-preset` option controls encoding speed/compression efficiency: slower presets can reduce file size at similar CRF but use more CPU and take longer to export. The default `veryfast` preset was selected after target-machine testing showed noticeably lower CPU usage with nearly unchanged perceived quality and file size. The `--h264-threads` option caps x264 worker threads (default `2`) so encoding is less likely to monopolize the CPU; this can make exports take longer, which is intentional to protect live capture and overall responsiveness. Export runs in a background thread, although JPEG compression and decoding can still compete with capture for CPU time. The exporter writes decoded frame buffers through a byte-oriented memory view rather than allocating a new full-frame `bytes` object for every frame; this is a small allocation reduction, not a substitute for measuring total CPU/RAM on the target machine.
 
 The buffer stores JPEG-compressed frames, not original camera frames, so increasing H.264 quality cannot restore details lost during JPEG compression. Higher camera resolution or JPEG quality increases CPU and RAM requirements. If the RAM cap is reached, the available pre-event window may be shorter than 45 seconds. Actual camera resolution and frame rate depend on the webcam and driver.
 
@@ -79,7 +79,8 @@ Useful options:
 - `--width`, `--height`: requested camera resolution (defaults `1280x720`)
 - `--jpeg-quality`: intermediate JPEG quality from 1 to 100 (default `98`)
 - `--h264-crf`: H.264 quality level from 0 to 51; lower means higher quality (default `18`)
-- `--h264-preset`: x264 speed/compression preset (default `medium`)
+- `--h264-preset`: x264 speed/compression preset (default `veryfast`)
+- `--h264-threads`: maximum x264 worker threads (default `2`)
 - `--ffmpeg`: FFmpeg executable or full path (default `ffmpeg`)
 - `--max-buffer-mib`: rolling buffer memory limit in MiB (default `512`)
 - `--output`: output folder (default `recordings/`)

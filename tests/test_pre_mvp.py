@@ -63,7 +63,8 @@ class BackgroundExporterTests(unittest.TestCase):
                 self.assertFalse(exporter.submit([(1.0, b"a"), (1.1, b"b")], 1.2))
                 finish.set()
                 exporter.jobs.join()
-                kind, message = exporter.status.get(timeout=2)
+                kind, message, completed_trigger_time = exporter.status.get(timeout=2)
+                self.assertEqual(completed_trigger_time, 1.2)
                 self.assertEqual(kind, "success")
                 self.assertEqual(message, "fake.mp4")
         finally:

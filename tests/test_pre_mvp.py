@@ -1,10 +1,19 @@
 """Unit tests for the pre-MVP rolling buffer and background exporter."""
+import sys
 import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from pre_mvp.live_slicer_pre_mvp import BackgroundExporter, select_clip_window
+from pre_mvp.live_slicer_pre_mvp import BackgroundExporter, parse_args, select_clip_window
+
+
+class ConfigurationTests(unittest.TestCase):
+    def test_resource_aware_encoder_defaults(self):
+        with patch.object(sys, "argv", ["live_slicer_pre_mvp.py"]):
+            args = parse_args()
+        self.assertEqual(args.h264_preset, "veryfast")
+        self.assertEqual(args.h264_threads, 2)
 
 
 class ClipWindowTests(unittest.TestCase):

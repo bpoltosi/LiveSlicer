@@ -88,10 +88,10 @@ Useful options:
 Run from the repository root:
 
 ```bash
-python -m unittest discover -s tests -p 'test_pre_mvp.py'
+python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-Tests cover rejection below the minimum duration, acceptance at the minimum, selection of a full buffer window, empty/single-frame errors, and the background exporter's one-job-at-a-time behavior. They do not replace a real FFmpeg export test and a test with the target computer's physical webcam.
+Tests cover FFmpeg startup checks and installation opt-in, rejection below the minimum duration, acceptance at the minimum, selection of a full buffer window, empty/single-frame errors, and the background exporter's one-job-at-a-time behavior. They do not replace a real FFmpeg export test and a test with the target computer's physical webcam.
 
 ## Manual acceptance test (required before release)
 

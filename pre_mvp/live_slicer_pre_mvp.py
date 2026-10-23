@@ -62,7 +62,7 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, video_quality=95)
     if not quality_supported:
         print("Note: this OpenCV video backend does not expose an encoder quality control; using its default.")
     # Include the endpoint frame count; this also works for clips shorter than the target duration.
-    frame_count = max(2, int(round(actual_duration * fps)))
+    frame_count = max(2, int(round(actual_duration * fps)) + 1)
     idx = 0
     written = 0
     try:

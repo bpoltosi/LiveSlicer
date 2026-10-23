@@ -1,7 +1,10 @@
-"""Unit tests for the pre-MVP rolling-buffer selection logic."""
+"""Unit tests for the pre-MVP rolling buffer and background exporter."""
+import threading
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from pre_mvp.live_slicer_pre_mvp import select_clip_window
+from pre_mvp.live_slicer_pre_mvp import BackgroundExporter, select_clip_window
 
 
 class ClipWindowTests(unittest.TestCase):
@@ -27,6 +30,33 @@ class ClipWindowTests(unittest.TestCase):
     def test_single_frame_cannot_make_video(self):
         with self.assertRaisesRegex(RuntimeError, "Not enough webcam frames"):
             select_clip_window([(10.0, b"only")], trigger_time=10.1, duration=45.0)
+
+
+class BackgroundExporterTests(unittest.TestCase):
+    def test_second_export_is_rejected_while_first_is_running(self):
+        started = threading.Event()
+        finish = threading.Event()
+
+        def slow_export(*args, **kwargs):
+            started.set()
+            if not finish.wait(timeout=3):
+                raise TimeoutError("test export timed out")
+            return Path("fake.mp4")
+
+        exporter = BackgroundExporter(45.0, 30.0, Path("recordings"), 100)
+        try:
+            with patch("pre_mvp.live_slicer_pre_mvp.save_clip", side_effect=slow_export):
+                self.assertTrue(exporter.submit([(1.0, b"a"), (1.1, b"b")], 1.2))
+                self.assertTrue(started.wait(timeout=2), "background worker did not start")
+                self.assertFalse(exporter.submit([(1.0, b"a"), (1.1, b"b")], 1.2))
+                finish.set()
+                exporter.jobs.join()
+                kind, message = exporter.status.get(timeout=2)
+                self.assertEqual(kind, "success")
+                self.assertEqual(message, "fake.mp4")
+        finally:
+            finish.set()
+            exporter.close()
 
 
 if __name__ == "__main__":

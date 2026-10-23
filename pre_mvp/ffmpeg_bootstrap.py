@@ -90,6 +90,52 @@ def _installer_command() -> Optional[list[str]]:
 
 
 
+def _download_with_retries(url: str, destination: Path, attempts: int = 4) -> None:
+    """Download a large file in chunks, retrying transient network failures."""
+    import time
+
+    chunk_size = 1024 * 1024
+    last_error: Optional[Exception] = None
+
+    for attempt in range(1, attempts + 1):
+        offset = destination.stat().st_size if destination.exists() else 0
+        headers = {"User-Agent": "LiveSlicer-pre-MVP"}
+        if offset:
+            headers["Range"] = f"bytes={offset}-"
+        request = urllib.request.Request(url, headers=headers)
+
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                # Resume only when the server confirms the requested byte range.
+                status = getattr(response, "status", response.getcode())
+                if offset and status != 206:
+                    offset = 0
+                mode = "ab" if offset and status == 206 else "wb"
+                with destination.open(mode) as target:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        target.write(chunk)
+            if destination.exists() and destination.stat().st_size > 0:
+                return
+            raise OSError("o servidor retornou um arquivo vazio")
+        except (OSError, TimeoutError, urllib.error.URLError) as exc:
+            last_error = exc
+            if attempt < attempts:
+                print(
+                    f"Falha no download do FFmpeg (tentativa {attempt}/{attempts}). "
+                    "Tentando novamente..."
+                )
+                time.sleep(min(2 ** attempt, 10))
+
+    raise RuntimeError(
+        f"Não foi possível baixar o FFmpeg após {attempts} tentativas. "
+        "Verifique sua conexão com a internet e tente novamente."
+        + (f" Detalhe: {last_error}" if last_error else "")
+    )
+
+
 def _install_windows_ffmpeg_zip() -> str:
     """Install an FFmpeg essentials build under the current user's LocalAppData."""
     if platform.system() != "Windows":
@@ -101,27 +147,22 @@ def _install_windows_ffmpeg_zip() -> str:
 
     with tempfile.TemporaryDirectory(prefix="liveslicer-ffmpeg-") as temp_dir:
         archive = Path(temp_dir) / "ffmpeg.zip"
-        request = urllib.request.Request(url, headers={"User-Agent": "LiveSlicer-pre-MVP"})
-        try:
-            with urllib.request.urlopen(request, timeout=45) as response, archive.open("wb") as target:
-                shutil.copyfileobj(response, target)
-        except Exception as exc:
-            raise RuntimeError(f"FFmpeg download failed ({url}): {exc}") from exc
-
+        print("Baixando FFmpeg; arquivos grandes podem levar alguns minutos...")
+        _download_with_retries(url, archive)
         try:
             with zipfile.ZipFile(archive) as bundle:
                 root = Path(temp_dir).resolve()
                 for member in bundle.infolist():
                     destination = (root / member.filename).resolve()
                     if os.path.commonpath((str(root), str(destination))) != str(root):
-                        raise RuntimeError("The FFmpeg archive contains an invalid extraction path.")
+                        raise RuntimeError("O pacote FFmpeg contém um caminho de extração inválido.")
                 bundle.extractall(root)
         except (OSError, zipfile.BadZipFile) as exc:
-            raise RuntimeError(f"Could not extract downloaded FFmpeg package: {exc}") from exc
+            raise RuntimeError(f"Não foi possível extrair o pacote FFmpeg baixado: {exc}") from exc
 
         candidates = list(Path(temp_dir).glob("**/bin/ffmpeg.exe"))
         if not candidates:
-            raise RuntimeError("Downloaded package does not contain bin/ffmpeg.exe.")
+            raise RuntimeError("O pacote baixado não contém bin/ffmpeg.exe.")
         destination_bin = install_dir / "bin"
         if destination_bin.exists():
             shutil.rmtree(destination_bin)
@@ -129,9 +170,8 @@ def _install_windows_ffmpeg_zip() -> str:
 
     executable = str((install_dir / "bin" / "ffmpeg.exe").resolve())
     if not Path(executable).is_file():
-        raise RuntimeError("FFmpeg installation finished but ffmpeg.exe was not found.")
+        raise RuntimeError("A instalação terminou, mas ffmpeg.exe não foi encontrado.")
     return executable
-
 
 def ensure_ffmpeg(requested: str = "ffmpeg") -> str:
     """Return a usable FFmpeg path; install on user consent and restart the app if needed."""

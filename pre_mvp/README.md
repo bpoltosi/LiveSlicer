@@ -6,34 +6,51 @@ This standalone Python prototype tests rolling pre-event capture using one compu
 
 - Opens webcam index 0 by default and requests 1280x720; the camera may choose a different supported resolution.
 - Continuously keeps a rolling, in-memory buffer of JPEG-compressed frames, targeting the preceding 45 seconds.
-- Press **Space** to export the available footage before the keypress to an MP4 in `recordings/`.
-- Supports short clips during startup: if fewer than 45 seconds have accumulated, the footage available is saved (at least two frames are required).
-- **Exports in a background worker.** The capture/preview loop continues while MP4 encoding and disk writes run, instead of doing the entire export in the UI loop.
-- Allows one export at a time. Further Space presses while a save is in progress are rejected with a console message, preventing multiple large snapshots from accumulating in RAM.
+- Press **Space** to export the available footage before the keypress to an H.264 MP4 in `recordings/`.
+- **Minimum clip duration is 10 seconds by default.** If fewer than 10 seconds of footage are available, the export is rejected and the app reports how much more footage is needed. This prevents tiny clips created during startup or by accidental early keypresses.
+- The minimum can be changed with `--min-clip-seconds`, but cannot exceed the target buffer duration.
+- **Exports in a background worker.** The capture/preview loop continues while FFmpeg encodes and writes the MP4.
+- Allows one export at a time. Further Space presses while a save is in progress are rejected, avoiding multiple large snapshots accumulating in RAM.
 - Shows buffer duration, approximate buffer RAM, and a background-saving status in the preview.
-- Press **Q** or **Esc** to quit. If an export is already in progress, the app waits for it to finish so the MP4 is not intentionally abandoned mid-write.
+- Press **Q** or **Esc** to quit. If an export is in progress, the app waits for it to finish so the MP4 is not intentionally abandoned mid-write.
 - Requests a 1-frame camera capture buffer where supported to reduce latency.
 
-## Quality, performance, and limits
+## H.264 quality and performance
 
-Defaults are 30 FPS export, JPEG quality 98/100 for the in-memory rolling buffer, an MP4 quality hint of 100/100, and a 512 MiB RAM cap. The MP4 uses OpenCV's `mp4v` writer.
+Video is encoded by the FFmpeg command-line executable using `libx264` and H.264 in an MP4 container. Defaults are:
 
-**Important:** JPEG quality controls the intermediate frames, while `--video-quality` is only a hint to the installed OpenCV video backend. Some backends ignore or do not expose this control. Therefore, setting the hint to 100 does **not** guarantee lossless or maximum-quality MP4 output. The export is re-encoded and is not a bit-for-bit copy of the webcam stream.
+- 30 FPS output
+- JPEG quality 98/100 for frames in the rolling RAM buffer
+- H.264 CRF 18 (lower CRF generally means higher quality and larger files)
+- x264 preset `medium`
+- 512 MiB rolling-buffer memory cap
 
-Higher JPEG quality and resolution can increase CPU use, frame-processing time, and RAM consumption. If the memory cap is reached, the available rolling window may become shorter than 45 seconds. The actual resolution/FPS and encoder quality depend on the webcam, system load, OpenCV build, and video backend. Background export removes the main source of UI blocking, but encoding and JPEG compression still consume CPU and may affect preview smoothness on slower computers.
+The `--h264-crf` option accepts values from 0 to 51. As a practical starting point, CRF 18 is high quality; CRF 20–23 generally reduces file size at some quality cost. CRF 0 is not a guarantee of lossless capture end-to-end because webcam acquisition and the in-memory JPEG buffer are already lossy. The `--h264-preset` option controls encoding speed/compression efficiency: slower presets can reduce file size at similar CRF but use more CPU and take longer to export. Export runs in a background thread, although encoding and JPEG compression can still compete with capture for CPU time.
 
-For genuinely higher and more predictable output quality, a future iteration should use an explicit FFmpeg encoding pipeline (for example, a configurable H.264 CRF/preset or a high-bitrate/lossless codec where appropriate) rather than relying on OpenCV's backend-dependent quality hint. That change should be benchmarked against CPU usage, disk space, and dropped-frame behavior before becoming the default.
+The buffer stores JPEG-compressed frames, not original camera frames, so increasing H.264 quality cannot restore details lost during JPEG compression. Higher camera resolution or JPEG quality increases CPU and RAM requirements. If the RAM cap is reached, the available pre-event window may be shorter than 45 seconds. Actual camera resolution and frame rate depend on the webcam and driver.
+
+**FFmpeg requirement:** FFmpeg must be installed separately and available on `PATH`, with an FFmpeg build that includes the `libx264` encoder. If it is installed elsewhere, pass its executable path with `--ffmpeg`. The Python requirements file installs OpenCV but does not install the FFmpeg system executable.
 
 ## Requirements and launch
 
 - Python 3.9+
 - OpenCV Python package
+- FFmpeg with `libx264`
 
-Install dependencies:
+Install Python dependencies:
 
 ```bash
 python -m pip install -r pre_mvp/requirements.txt
 ```
+
+Check FFmpeg and H.264 encoder support:
+
+```bash
+ffmpeg -version
+ffmpeg -hide_banner -encoders
+```
+
+Confirm that the encoder list contains `libx264`.
 
 From the repository root:
 
@@ -47,19 +64,22 @@ If needed, select another camera:
 python pre_mvp/live_slicer_pre_mvp.py --camera 1
 ```
 
-Example higher-resolution settings:
+Example higher-resolution / higher-quality settings:
 
 ```bash
-python pre_mvp/live_slicer_pre_mvp.py --duration 45 --fps 30 --width 1920 --height 1080 --jpeg-quality 100 --video-quality 100 --max-buffer-mib 768 --output recordings
+python pre_mvp/live_slicer_pre_mvp.py --duration 45 --min-clip-seconds 10 --fps 30 --width 1920 --height 1080 --jpeg-quality 100 --h264-crf 16 --h264-preset slow --max-buffer-mib 768 --output recordings
 ```
 
-Options:
+Useful options:
 - `--camera`: webcam index (default `0`)
 - `--duration`: maximum rolling pre-event duration in seconds (default `45`)
+- `--min-clip-seconds`: minimum duration allowed for an export (default `10`)
 - `--fps`: exported frame rate (default `30`)
 - `--width`, `--height`: requested camera resolution (defaults `1280x720`)
 - `--jpeg-quality`: intermediate JPEG quality from 1 to 100 (default `98`)
-- `--video-quality`: encoder quality hint from 0 to 100 (default `100`; backend-dependent)
+- `--h264-crf`: H.264 quality level from 0 to 51; lower means higher quality (default `18`)
+- `--h264-preset`: x264 speed/compression preset (default `medium`)
+- `--ffmpeg`: FFmpeg executable or full path (default `ffmpeg`)
 - `--max-buffer-mib`: rolling buffer memory limit in MiB (default `512`)
 - `--output`: output folder (default `recordings/`)
 
@@ -71,25 +91,26 @@ Run from the repository root:
 python -m unittest discover -s tests -p 'test_pre_mvp.py'
 ```
 
-The tests cover clip-window selection and the background export worker's one-job-at-a-time behavior. They do not replace a test with the target computer's physical webcam.
+Tests cover rejection below the minimum duration, acceptance at the minimum, selection of a full buffer window, empty/single-frame errors, and the background exporter's one-job-at-a-time behavior. They do not replace a real FFmpeg export test and a test with the target computer's physical webcam.
 
 ## Manual acceptance test (required before release)
 
-1. Launch the script and confirm the webcam preview appears.
-2. Immediately press Space; verify a short MP4 is created and plays.
-3. Repeat after 5–10 seconds; verify the clip contains the available pre-event footage.
-4. Wait until the indicator reaches 45 seconds, press Space, and verify an approximately 45-second playable MP4.
-5. While a clip is saving, verify the preview continues updating and the window still responds.
-6. Press Space again during export; confirm the app explains that an export is already in progress rather than queuing another clip.
-7. Inspect output resolution, frame rate, duration, and visual quality in a media player or with FFprobe.
-8. Test camera permissions, an alternate camera index, Q/Esc, and the RAM cap.
+1. Install FFmpeg and confirm `libx264` is listed by `ffmpeg -encoders`.
+2. Launch the script and confirm the webcam preview appears.
+3. Press Space before 10 seconds have elapsed; confirm no file is generated and the app reports the minimum-duration rule.
+4. Wait until at least 10 seconds are available, press Space, and verify an H.264 MP4 is created and plays.
+5. Wait until the indicator reaches 45 seconds, press Space, and verify an approximately 45-second playable MP4.
+6. While a clip is saving, verify the preview continues updating and the window still responds.
+7. Press Space again during export; confirm the app reports that an export is already in progress.
+8. Inspect codec, resolution, frame rate, duration, visual quality, and file size (for example with FFprobe).
+9. Test camera permissions, an alternate camera index, Q/Esc, sustained load, and the RAM cap.
 
 ## Known limitations
 
 - The OpenCV preview window must have keyboard focus for Space to be received.
-- JPEG compression and MP4 encoding use CPU; background export should avoid a long UI freeze, but system load may still cause preview stutter or webcam frame gaps.
+- The source frames are JPEG-compressed before H.264 encoding, so this is not lossless end-to-end.
+- JPEG compression and H.264 encoding use CPU; background export should avoid a long UI freeze, but system load may still cause preview stutter or webcam frame gaps.
 - A webcam stall can cause a gap or repeated frames in the exported clip.
-- The buffer is RAM-resident and its configured cap can shorten the available pre-event window on high-resolution/high-motion footage.
-- The MP4 encoder quality hint may be ignored by the installed OpenCV backend.
+- The RAM cap can shorten the available pre-event window on high-resolution/high-motion footage.
 - This prototype is not connected to the C++ service or multi-camera RTSP capture.
-- Real webcam, keyboard-focus, sustained-load, and final-MP4 quality checks on the target computer remain required before declaring the pre-MVP validated or publishing a release.
+- Real webcam, keyboard-focus, sustained-load, and output-quality checks on the target computer remain required before declaring the pre-MVP validated or publishing a release.

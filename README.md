@@ -554,3 +554,14 @@ If correct, the response will be
 
 ---
 
+
+
+## Live Slicer pre-MVP (webcam)
+
+O repositório também contém um protótipo independente em Python para validar o fluxo de captura de clipes curtos: webcam do computador, buffer circular de até 45 segundos e tecla Espaço para exportar MP4/H.264.
+
+Consulte [pre_mvp/README.md](pre_mvp/README.md) para instalação, uso, opções, testes e critérios de validação manual. Este protótipo não substitui nem está integrado ao aplicativo C++/RTSP descrito acima.
+
+**Status:** implementação pré-MVP; a validação final com webcam física, foco do teclado e reprodução dos arquivos deve ocorrer no computador-alvo antes de considerar a versão validada.
+
+**Futuro:** recursos de visão computacional permanecem fora do escopo atual e estão documentados em [VISION_COMPUTER_VISION_FUTURE.md](VISION_COMPUTER_VISION_FUTURE.md).

@@ -5,6 +5,9 @@ import os
 import platform
 import shutil
 import subprocess
+import tempfile
+import urllib.request
+import zipfile
 import sys
 from pathlib import Path
 from typing import Optional
@@ -22,6 +25,7 @@ def _find_ffmpeg(requested: str) -> Optional[str]:
     if platform.system() == "Windows":
         local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
         candidates = [
+            local / "LiveSlicer/ffmpeg/bin/ffmpeg.exe",
             local / "Microsoft/WinGet/Links/ffmpeg.exe",
             Path("C:/ffmpeg/bin/ffmpeg.exe"),
             Path("C:/Program Files/FFmpeg/bin/ffmpeg.exe"),
@@ -50,12 +54,18 @@ def _has_libx264(executable: str) -> bool:
 def _installer_command() -> Optional[list[str]]:
     system = platform.system()
     if system == "Windows":
-        if shutil.which("winget"):
+        winget = shutil.which("winget")
+        if not winget:
+            local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+            candidate = local / "Microsoft/WindowsApps/winget.exe"
+            if candidate.is_file():
+                winget = str(candidate)
+        if winget:
             return [
-                "winget", "install", "--id", "Gyan.FFmpeg.Shared", "--exact",
+                winget, "install", "--id", "Gyan.FFmpeg.Shared", "--exact",
                 "--accept-package-agreements", "--accept-source-agreements",
             ]
-        return None
+        return ["__download_ffmpeg_zip__"]
     if system == "Darwin":
         if shutil.which("brew"):
             return ["brew", "install", "ffmpeg"]
@@ -77,6 +87,50 @@ def _installer_command() -> Optional[list[str]]:
             command.insert(0, "sudo")
         return command
     return None
+
+
+
+def _install_windows_ffmpeg_zip() -> str:
+    """Install an FFmpeg essentials build under the current user's LocalAppData."""
+    if platform.system() != "Windows":
+        raise RuntimeError("This fallback is only available on Windows.")
+    local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+    install_dir = local / "LiveSlicer" / "ffmpeg"
+    install_dir.mkdir(parents=True, exist_ok=True)
+    url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+
+    with tempfile.TemporaryDirectory(prefix="liveslicer-ffmpeg-") as temp_dir:
+        archive = Path(temp_dir) / "ffmpeg.zip"
+        request = urllib.request.Request(url, headers={"User-Agent": "LiveSlicer-pre-MVP"})
+        try:
+            with urllib.request.urlopen(request, timeout=45) as response, archive.open("wb") as target:
+                shutil.copyfileobj(response, target)
+        except Exception as exc:
+            raise RuntimeError(f"FFmpeg download failed ({url}): {exc}") from exc
+
+        try:
+            with zipfile.ZipFile(archive) as bundle:
+                root = Path(temp_dir).resolve()
+                for member in bundle.infolist():
+                    destination = (root / member.filename).resolve()
+                    if os.path.commonpath((str(root), str(destination))) != str(root):
+                        raise RuntimeError("The FFmpeg archive contains an invalid extraction path.")
+                bundle.extractall(root)
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise RuntimeError(f"Could not extract downloaded FFmpeg package: {exc}") from exc
+
+        candidates = list(Path(temp_dir).glob("**/bin/ffmpeg.exe"))
+        if not candidates:
+            raise RuntimeError("Downloaded package does not contain bin/ffmpeg.exe.")
+        destination_bin = install_dir / "bin"
+        if destination_bin.exists():
+            shutil.rmtree(destination_bin)
+        shutil.copytree(candidates[0].parent, destination_bin)
+
+    executable = str((install_dir / "bin" / "ffmpeg.exe").resolve())
+    if not Path(executable).is_file():
+        raise RuntimeError("FFmpeg installation finished but ffmpeg.exe was not found.")
+    return executable
 
 
 def ensure_ffmpeg(requested: str = "ffmpeg") -> str:
@@ -104,18 +158,24 @@ def ensure_ffmpeg(requested: str = "ffmpeg") -> str:
         print("Instalação cancelada. Instale o FFmpeg e abra o Live Slicer novamente.")
         raise SystemExit(1)
 
-    print("Executando instalador:", " ".join(command))
     try:
-        result = subprocess.run(command, check=False)
-    except OSError as exc:
-        raise SystemExit(f"Não foi possível executar o instalador: {exc}") from exc
-    if result.returncode != 0:
-        raise SystemExit(
-            "A instalação do FFmpeg falhou ou foi cancelada. "
-            "Verifique a mensagem do gerenciador de pacotes e tente novamente."
-        )
+        if command == ["__download_ffmpeg_zip__"]:
+            print("winget não está disponível. Baixando FFmpeg para o perfil deste usuário...")
+            executable = _install_windows_ffmpeg_zip()
+        else:
+            print("Executando instalador:", " ".join(command))
+            result = subprocess.run(command, check=False)
+            if result.returncode != 0:
+                raise SystemExit(
+                    "A instalação do FFmpeg falhou ou foi cancelada. "
+                    "Verifique a mensagem do gerenciador de pacotes e tente novamente."
+                )
+            executable = _find_ffmpeg("ffmpeg")
+    except (OSError, RuntimeError) as exc:
+        raise SystemExit(f"Não foi possível instalar o FFmpeg: {exc}") from exc
 
-    executable = _find_ffmpeg("ffmpeg")
+    if not executable:
+        executable = _find_ffmpeg("ffmpeg")
     if not executable:
         raise SystemExit(
             "A instalação terminou, mas o executável ffmpeg ainda não foi localizado. "

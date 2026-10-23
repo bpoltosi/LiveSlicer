@@ -36,7 +36,9 @@ def parse_args():
     parser.add_argument("--h264-preset", choices=("ultrafast", "superfast", "veryfast", "faster",
                         "fast", "medium", "slow", "slower", "veryslow"), default="veryfast",
                         help="libx264 speed/compression preset (default: veryfast)")
-    parser.add_argument("--h264-threads", type=int, default=2,\n                        help="Maximum x264 worker threads during export (default: 2)")\n    parser.add_argument("--ffmpeg", default="ffmpeg", help="FFmpeg executable path (default: ffmpeg on PATH)")
+    parser.add_argument("--h264-threads", type=int, default=2,
+                        help="Maximum x264 worker threads during export (default: 2)")
+    parser.add_argument("--ffmpeg", default="ffmpeg", help="FFmpeg executable path (default: ffmpeg on PATH)")
     parser.add_argument("--max-buffer-mib", type=int, default=512, help="RAM limit for the rolling buffer")
     return parser.parse_args()
 
@@ -67,7 +69,8 @@ def select_clip_window(frames, trigger_time, duration, min_clip_seconds=10.0, cl
 
 
 def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
-              h264_crf=18, h264_preset="veryfast", min_clip_seconds=10.0, clip_start_time=None,\n              h264_threads=2):
+              h264_crf=18, h264_preset="veryfast", min_clip_seconds=10.0, clip_start_time=None,
+              h264_threads=2):
     """Encode a stable frame snapshot to H.264 MP4 using FFmpeg."""
     executable = shutil.which(ffmpeg) if not Path(ffmpeg).is_file() else str(Path(ffmpeg))
     if executable is None:
@@ -147,7 +150,8 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
 class BackgroundExporter:
     """One background export at a time; prevents repeated keypresses queuing RAM-heavy snapshots."""
 
-    def __init__(self, duration, min_clip_seconds, fps, output_dir, ffmpeg, h264_crf, h264_preset,\n                 h264_threads=2):
+    def __init__(self, duration, min_clip_seconds, fps, output_dir, ffmpeg, h264_crf, h264_preset,
+                 h264_threads=2):
         self.duration = duration
         self.min_clip_seconds = min_clip_seconds
         self.fps = fps

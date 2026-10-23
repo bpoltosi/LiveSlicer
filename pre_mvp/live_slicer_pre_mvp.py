@@ -120,7 +120,10 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
         ) from exc
     finally:
         if process is not None and process.stdin is not None and not process.stdin.closed:
-            process.stdin.close()
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
     if written < 2 or not output_path.exists() or output_path.stat().st_size == 0:
         try:
             output_path.unlink(missing_ok=True)

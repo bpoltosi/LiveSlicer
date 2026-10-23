@@ -41,28 +41,33 @@ def parse_args():
     return parser.parse_args()
 
 
-def select_clip_window(frames, trigger_time, duration, min_clip_seconds=10.0):
-    """Select the pre-event window and reject clips shorter than the configured minimum."""
+def select_clip_window(frames, trigger_time, duration, min_clip_seconds=10.0, clip_start_time=None):
+    """Select a pre-event window, or a non-overlapping segment after the previous clip."""
     if not frames:
         raise RuntimeError("No webcam frames are buffered yet.")
-    start_limit = trigger_time - duration
+    start_limit = trigger_time - duration if clip_start_time is None else clip_start_time
+    if clip_start_time is not None and frames[0][0] > clip_start_time + 0.1:
+        raise RuntimeError(
+            "Clip not saved: the previous clip's end is older than the available buffer; "
+            "the segment cannot be exported without a gap."
+        )
     eligible = [(timestamp, frame) for timestamp, frame in frames
                 if start_limit <= timestamp <= trigger_time]
     if len(eligible) < 2:
-        raise RuntimeError("Not enough webcam frames yet; keep the app running briefly and try again.")
-    start_time = eligible[0][0]
-    actual_duration = min(duration, max(0.0, trigger_time - start_time))
+        raise RuntimeError("Not enough webcam frames are buffered yet; keep the app running briefly and try again.")
+    start_time = start_limit if clip_start_time is not None else eligible[0][0]
+    actual_duration = max(0.0, trigger_time - start_time)
     if actual_duration < min_clip_seconds:
         remaining = max(0.0, min_clip_seconds - actual_duration)
         raise RuntimeError(
-            f"Clip not saved: {actual_duration:.1f}s available; at least "
+            f"Clip not saved: only {actual_duration:.1f}s since the previous clip; at least "
             f"{min_clip_seconds:.1f}s is required. Keep recording for {remaining:.1f}s more."
         )
     return eligible, start_time, actual_duration
 
 
 def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
-              h264_crf=18, h264_preset="medium", min_clip_seconds=10.0):
+              h264_crf=18, h264_preset="medium", min_clip_seconds=10.0, clip_start_time=None):
     """Encode a stable frame snapshot to H.264 MP4 using FFmpeg."""
     executable = shutil.which(ffmpeg) if not Path(ffmpeg).is_file() else str(Path(ffmpeg))
     if executable is None:
@@ -71,7 +76,8 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
             "or pass --ffmpeg with its full path."
         )
     eligible, start_time, actual_duration = select_clip_window(
-        frames, trigger_time, duration, min_clip_seconds=min_clip_seconds
+        frames, trigger_time, duration, min_clip_seconds=min_clip_seconds,
+        clip_start_time=clip_start_time
     )
     first = cv2.imdecode(eligible[0][1], cv2.IMREAD_COLOR)
     if first is None:
@@ -156,13 +162,13 @@ class BackgroundExporter:
         self._thread = threading.Thread(target=self._run, name="LiveSlicerExporter", daemon=True)
         self._thread.start()
 
-    def submit(self, frames, trigger_time):
+    def submit(self, frames, trigger_time, clip_start_time=None):
         with self._lock:
             if self._pending:
                 return False
             self._pending = True
             try:
-                self.jobs.put_nowait((frames, trigger_time))
+                self.jobs.put_nowait((frames, trigger_time, clip_start_time))
             except queue.Full:
                 self._pending = False
                 return False
@@ -178,15 +184,16 @@ class BackgroundExporter:
             try:
                 if job is None:
                     return
-                frames, trigger_time = job
+                frames, trigger_time, clip_start_time = job
                 try:
                     path = save_clip(
                         frames, trigger_time, self.duration, self.fps, self.output_dir,
-                        self.ffmpeg, self.h264_crf, self.h264_preset, self.min_clip_seconds
+                        self.ffmpeg, self.h264_crf, self.h264_preset, self.min_clip_seconds,
+                        clip_start_time
                     )
-                    self.status.put(("success", str(path)))
+                    self.status.put(("success", str(path), trigger_time))
                 except Exception as exc:
-                    self.status.put(("error", str(exc)))
+                    self.status.put(("error", str(exc), None))
                 finally:
                     with self._lock:
                         self._pending = False
@@ -237,8 +244,10 @@ def main():
           f"minimum clip={args.min_clip_seconds:.1f}s, resolution={actual_width}x{actual_height}, "
           f"fps={args.fps:g}, JPEG quality={args.jpeg_quality}, H.264 CRF={args.h264_crf}, "
           f"preset={args.h264_preset}")
-    print(f"Buffer RAM limit: {args.max_buffer_mib} MiB. SPACE saves only if at least "
-          f"{args.min_clip_seconds:.1f}s are available; Q/ESC quits.")
+    print(f"Buffer RAM limit: {args.max_buffer_mib} MiB. First SPACE saves up to "
+          f"{args.duration:.0f}s before the event; later clips start exactly where the previous "
+          f"saved clip ended and require at least {args.min_clip_seconds:.1f}s. Q/ESC quits.")
+    last_clip_end = None
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     try:
         while True:
@@ -284,23 +293,34 @@ def main():
                 with buffer_lock:
                     snapshot = list(buffer)
                     trigger_time = time.monotonic()
-                    try:
-                        select_clip_window(snapshot, trigger_time, args.duration, args.min_clip_seconds)
-                    except RuntimeError as exc:
-                        print(str(exc))
+                    clip_start_time = last_clip_end
+                    if clip_start_time is not None and trigger_time - clip_start_time < args.min_clip_seconds:
+                        interval = trigger_time - clip_start_time
+                        print(f"Trigger ignored: only {interval:.1f}s since the previous clip; "
+                              f"minimum is {args.min_clip_seconds:.1f}s.")
                         snapshot = None
+                    else:
+                        try:
+                            select_clip_window(
+                                snapshot, trigger_time, args.duration, args.min_clip_seconds,
+                                clip_start_time=clip_start_time
+                            )
+                        except RuntimeError as exc:
+                            print(str(exc))
+                            snapshot = None
                 if snapshot is not None:
-                    if exporter.submit(snapshot, trigger_time):
+                    if exporter.submit(snapshot, trigger_time, clip_start_time):
                         print("H.264 clip export started in background.")
                     else:
-                        print("A clip is already being saved; wait for it to finish before saving another.")
+                        print("A clip is already being saved; this trigger was ignored.")
 
             while True:
                 try:
-                    kind, message = exporter.status.get_nowait()
+                    kind, message, completed_trigger_time = exporter.status.get_nowait()
                 except queue.Empty:
                     break
                 if kind == "success":
+                    last_clip_end = completed_trigger_time
                     print(f"Saved H.264 clip: {message}")
                 else:
                     print(f"Could not save clip: {message}")

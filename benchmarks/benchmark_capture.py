@@ -64,9 +64,9 @@ def main() -> int:
             if not ok:
                 continue
             jpeg_times.append(t2 - t1)
-            ok, decoded = cv2.imdecode(encoded, cv2.IMREAD_COLOR), None
+            decoded = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
             t3 = time.perf_counter()
-            if ok is None:
+            if decoded is None:
                 continue
             decode_times.append(t3 - t2)
             jpeg_sizes.append(len(encoded))

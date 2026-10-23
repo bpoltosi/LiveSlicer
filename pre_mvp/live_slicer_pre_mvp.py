@@ -34,9 +34,9 @@ def parse_args():
     parser.add_argument("--h264-crf", type=int, default=18,
                         help="H.264 quality: lower is better; typical range 18-23 (default: 18)")
     parser.add_argument("--h264-preset", choices=("ultrafast", "superfast", "veryfast", "faster",
-                        "fast", "medium", "slow", "slower", "veryslow"), default="medium",
-                        help="libx264 speed/compression preset (default: medium)")
-    parser.add_argument("--ffmpeg", default="ffmpeg", help="FFmpeg executable path (default: ffmpeg on PATH)")
+                        "fast", "medium", "slow", "slower", "veryslow"), default="veryfast",
+                        help="libx264 speed/compression preset (default: veryfast)")
+    parser.add_argument("--h264-threads", type=int, default=2,\n                        help="Maximum x264 worker threads during export (default: 2)")\n    parser.add_argument("--ffmpeg", default="ffmpeg", help="FFmpeg executable path (default: ffmpeg on PATH)")
     parser.add_argument("--max-buffer-mib", type=int, default=512, help="RAM limit for the rolling buffer")
     return parser.parse_args()
 
@@ -67,7 +67,7 @@ def select_clip_window(frames, trigger_time, duration, min_clip_seconds=10.0, cl
 
 
 def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
-              h264_crf=18, h264_preset="medium", min_clip_seconds=10.0, clip_start_time=None):
+              h264_crf=18, h264_preset="veryfast", min_clip_seconds=10.0, clip_start_time=None,\n              h264_threads=2):
     """Encode a stable frame snapshot to H.264 MP4 using FFmpeg."""
     executable = shutil.which(ffmpeg) if not Path(ffmpeg).is_file() else str(Path(ffmpeg))
     if executable is None:
@@ -147,7 +147,7 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
 class BackgroundExporter:
     """One background export at a time; prevents repeated keypresses queuing RAM-heavy snapshots."""
 
-    def __init__(self, duration, min_clip_seconds, fps, output_dir, ffmpeg, h264_crf, h264_preset):
+    def __init__(self, duration, min_clip_seconds, fps, output_dir, ffmpeg, h264_crf, h264_preset,\n                 h264_threads=2):
         self.duration = duration
         self.min_clip_seconds = min_clip_seconds
         self.fps = fps
@@ -216,7 +216,7 @@ def main():
         raise SystemExit("--jpeg-quality must be 1-100")
     if not 0 <= args.h264_crf <= 51:
         raise SystemExit("--h264-crf must be 0-51 (lower is higher quality)")
-    if args.width <= 0 or args.height <= 0 or args.max_buffer_mib <= 0:
+    if args.width <= 0 or args.height <= 0 or args.max_buffer_mib <= 0 or args.h264_threads <= 0:
         raise SystemExit("--width, --height and --max-buffer-mib must be greater than zero")
     args.ffmpeg = ensure_ffmpeg(args.ffmpeg)
 
@@ -239,11 +239,11 @@ def main():
     encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), args.jpeg_quality]
     window_name = "Live Slicer pre-MVP — SPACE saves previous window | Q quits"
     exporter = BackgroundExporter(args.duration, args.min_clip_seconds, args.fps, args.output,
-                                  args.ffmpeg, args.h264_crf, args.h264_preset)
+                                  args.ffmpeg, args.h264_crf, args.h264_preset, args.h264_threads)
     print(f"Live Slicer pre-MVP: camera={args.camera}, target={args.duration:.1f}s, "
           f"minimum clip={args.min_clip_seconds:.1f}s, resolution={actual_width}x{actual_height}, "
           f"fps={args.fps:g}, JPEG quality={args.jpeg_quality}, H.264 CRF={args.h264_crf}, "
-          f"preset={args.h264_preset}")
+          f"preset={args.h264_preset}, x264 threads={args.h264_threads}")
     print(f"Buffer RAM limit: {args.max_buffer_mib} MiB. First SPACE saves up to "
           f"{args.duration:.0f}s before the event; later clips start exactly where the previous "
           f"saved clip ended and require at least {args.min_clip_seconds:.1f}s. Q/ESC quits.")

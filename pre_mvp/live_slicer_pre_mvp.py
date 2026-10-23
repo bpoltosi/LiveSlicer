@@ -36,7 +36,6 @@ def select_clip_window(frames, trigger_time, duration):
         raise RuntimeError("Not enough webcam frames yet; keep the app running briefly and try again.")
     # Do not require the full requested duration: save everything available during warm-up.
     start_time = eligible[0][0]
-    end_time = min(trigger_time, eligible[-1][0] + 1.0 / max(1.0, len(eligible) / max(duration, 0.001)))
     actual_duration = min(duration, max(0.0, trigger_time - start_time))
     # A clip shorter than one frame interval is not a useful/decodable video.
     if actual_duration <= 0:

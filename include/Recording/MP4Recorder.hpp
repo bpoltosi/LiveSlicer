@@ -52,23 +52,30 @@ public slots:
             m_prebuffer.push_back(packet);
             m_prebufferBytes += static_cast<size_t>(packet.data.size());
 
-            // Time-based trim: keep only the last pre_buffering_time seconds.
-            if (!m_prebuffer.empty()) {
-                const EncodedVideoPacket &last = m_prebuffer.back();
-                int64_t last_ts = (last.pts != AV_NOPTS_VALUE) ? last.pts : last.dts;
-                if (last_ts != AV_NOPTS_VALUE) {
-                    double last_sec = last_ts * av_q2d(last.time_base);
-                    while (!m_prebuffer.empty()) {
-                        const EncodedVideoPacket &first = m_prebuffer.front();
-                        int64_t first_ts = (first.pts != AV_NOPTS_VALUE) ? first.pts : first.dts;
-                        if (first_ts == AV_NOPTS_VALUE) break;
-                        double first_sec = first_ts * av_q2d(first.time_base);
-                        if (last_sec - first_sec > pre_buffering_time) {
-                            m_prebufferBytes -= static_cast<size_t>(m_prebuffer.front().data.size());
-                            m_prebuffer.pop_front();
-                        } else {
-                            break;
-                        }
+            // Trim against local monotonic receive time rather than RTSP PTS/DTS.
+            // RTSP timestamps may be missing, reset after reconnect, or jump backwards.
+            // Keep the latest keyframe at or before the cutoff so a saved clip starts
+            // on a decodable frame and retains at least the requested pre-roll (plus
+            // up to one GOP). Hard caps below remain the safety net for pathological
+            // streams or very long GOPs.
+            if (m_prebuffer.size() > 1 &&
+                m_prebuffer.back().received_monotonic_us > 0) {
+                const int64_t cutoff_us = m_prebuffer.back().received_monotonic_us -
+                    static_cast<int64_t>(std::max(0.0f, pre_buffering_time) * 1000000.0);
+                size_t candidate = 0;
+                bool foundKeyframe = false;
+                for (size_t i = 0; i < m_prebuffer.size(); ++i) {
+                    const auto &entry = m_prebuffer[i];
+                    if (entry.received_monotonic_us > 0 &&
+                        entry.received_monotonic_us <= cutoff_us && entry.key) {
+                        candidate = i;
+                        foundKeyframe = true;
+                    }
+                }
+                if (foundKeyframe) {
+                    for (size_t i = 0; i < candidate; ++i) {
+                        m_prebufferBytes -= static_cast<size_t>(m_prebuffer.front().data.size());
+                        m_prebuffer.pop_front();
                     }
                 }
             }

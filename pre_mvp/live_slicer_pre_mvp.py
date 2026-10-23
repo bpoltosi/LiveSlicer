@@ -159,6 +159,7 @@ class BackgroundExporter:
         self.ffmpeg = ffmpeg
         self.h264_crf = h264_crf
         self.h264_preset = h264_preset
+        self.h264_threads = h264_threads
         self.jobs = queue.Queue(maxsize=1)
         self.status = queue.Queue()
         self._lock = threading.Lock()
@@ -193,7 +194,7 @@ class BackgroundExporter:
                     path = save_clip(
                         frames, trigger_time, self.duration, self.fps, self.output_dir,
                         self.ffmpeg, self.h264_crf, self.h264_preset, self.min_clip_seconds,
-                        clip_start_time
+                        clip_start_time, self.h264_threads
                     )
                     self.status.put(("success", str(path), trigger_time))
                 except Exception as exc:
@@ -221,7 +222,7 @@ def main():
     if not 0 <= args.h264_crf <= 51:
         raise SystemExit("--h264-crf must be 0-51 (lower is higher quality)")
     if args.width <= 0 or args.height <= 0 or args.max_buffer_mib <= 0 or args.h264_threads <= 0:
-        raise SystemExit("--width, --height and --max-buffer-mib must be greater than zero")
+        raise SystemExit("--width, --height, --max-buffer-mib and --h264-threads must be greater than zero")
     args.ffmpeg = ensure_ffmpeg(args.ffmpeg)
 
     camera = cv2.VideoCapture(args.camera)

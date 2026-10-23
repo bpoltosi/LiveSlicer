@@ -55,7 +55,10 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, video_quality=95)
     writer = cv2.VideoWriter(str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
     if not writer.isOpened():
         raise RuntimeError("Could not open MP4 writer; check OpenCV mp4v support.")
-    quality_supported = writer.set(cv2.VIDEOWRITER_PROP_QUALITY, float(video_quality))
+    try:
+        quality_supported = writer.set(cv2.VIDEOWRITER_PROP_QUALITY, float(video_quality))
+    except cv2.error:
+        quality_supported = False
     if not quality_supported:
         print("Note: this OpenCV video backend does not expose an encoder quality control; using its default.")
     # Include the endpoint frame count; this also works for clips shorter than the target duration.

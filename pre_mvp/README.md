@@ -29,7 +29,7 @@ The `--h264-crf` option accepts values from 0 to 51. As a practical starting poi
 
 The buffer stores JPEG-compressed frames, not original camera frames, so increasing H.264 quality cannot restore details lost during JPEG compression. Higher camera resolution or JPEG quality increases CPU and RAM requirements. If the RAM cap is reached, the available pre-event window may be shorter than 45 seconds. Actual camera resolution and frame rate depend on the webcam and driver.
 
-**FFmpeg requirement:** FFmpeg must be installed separately and available on `PATH`, with an FFmpeg build that includes the `libx264` encoder. If it is installed elsewhere, pass its executable path with `--ffmpeg`. The Python requirements file installs OpenCV but does not install the FFmpeg system executable.
+**FFmpeg setup:** At startup, the app checks that FFmpeg exists and includes the `libx264` encoder. If it is missing, it asks permission to install it using the system package manager (Windows: `winget`; macOS: Homebrew; Linux: `apt`, `dnf`, `pacman` or `zypper`, depending on what is available). After a successful installation, the app validates FFmpeg and automatically restarts itself, passing the discovered executable path so the current process's stale `PATH` does not prevent launch. The installer may request administrator privileges. If no supported package manager is available, the app explains that manual installation is required. If an installed FFmpeg lacks `libx264`, the app stops with a clear message rather than silently producing a different codec. If FFmpeg is installed at a custom location, pass its executable path with `--ffmpeg`. The Python requirements file installs OpenCV, not FFmpeg.
 
 ## Requirements and launch
 

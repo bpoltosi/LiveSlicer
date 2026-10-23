@@ -7,9 +7,10 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 
-def _find_ffmpeg(requested: str) -> str | None:
+def _find_ffmpeg(requested: str) -> Optional[str]:
     candidate = shutil.which(requested)
     if candidate:
         return str(Path(candidate).resolve())
@@ -46,7 +47,7 @@ def _has_libx264(executable: str) -> bool:
     return result.returncode == 0 and "libx264" in (result.stdout + result.stderr)
 
 
-def _installer_command() -> list[str] | None:
+def _installer_command() -> Optional[list[str]]:
     system = platform.system()
     if system == "Windows":
         if shutil.which("winget"):

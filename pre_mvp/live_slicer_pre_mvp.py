@@ -14,6 +14,11 @@ from pathlib import Path
 
 import cv2
 
+try:
+    from .ffmpeg_bootstrap import ensure_ffmpeg
+except ImportError:  # direct script execution from pre_mvp/
+    from ffmpeg_bootstrap import ensure_ffmpeg
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Live Slicer webcam pre-MVP")
@@ -206,10 +211,7 @@ def main():
         raise SystemExit("--h264-crf must be 0-51 (lower is higher quality)")
     if args.width <= 0 or args.height <= 0 or args.max_buffer_mib <= 0:
         raise SystemExit("--width, --height and --max-buffer-mib must be greater than zero")
-    if shutil.which(args.ffmpeg) is None and not Path(args.ffmpeg).is_file():
-        raise SystemExit(
-            f"FFmpeg executable not found: {args.ffmpeg!r}. Install FFmpeg or specify --ffmpeg."
-        )
+    args.ffmpeg = ensure_ffmpeg(args.ffmpeg)
 
     camera = cv2.VideoCapture(args.camera)
     if not camera.isOpened():

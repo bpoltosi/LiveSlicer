@@ -1,3 +1,65 @@
+# Live Slicer
+
+Live Slicer is a lightweight video-capture project with two distinct parts: the existing C++/Qt RTSP recorder (formerly documented as NVRLite) and an independent Python pre-MVP that tests instant clip capture from a local webcam.
+
+> **Project status:** the webcam pre-MVP is implemented in `pre_mvp/`, but final validation on the target computer is still required. Do not treat physical-webcam operation, long-session stability, or exported MP4 integrity as verified until those checks have been performed.
+
+## Project components
+
+### 1. C++ RTSP recorder
+
+The original application captures configured RTSP streams and records H.264 packets to MP4 without re-encoding. It includes stream/recording controls over HTTP, a configurable pre-buffer, reconnect handling, and an OpenCV multi-camera preview.
+
+See the architecture, dependencies, build instructions, configuration and REST API reference below.
+
+### 2. Python webcam pre-MVP
+
+The separate prototype uses the computer's webcam and the **Space** key to export the footage captured immediately before the keypress.
+
+- Requests 1280×720 from webcam index 0; the camera may choose another supported mode.
+- Maintains a rolling JPEG-frame buffer targeting up to 45 seconds, bounded by a 512 MiB memory cap.
+- Exports MP4/H.264 through FFmpeg in a background worker, keeping capture and preview responsive during export.
+- Uses a default minimum clip duration of 10 seconds; exports that do not meet the minimum are rejected.
+- Allows only one export at a time to limit additional memory pressure.
+- Uses H.264 CRF 18 and an encoder preset configured by the prototype. JPEG compression happens before H.264 encoding, so H.264 settings cannot recover detail already lost in the JPEG frames.
+- Press **Q** or **Esc** to quit. If an export is running, the application waits for it to finish.
+
+Start with the dedicated guide: **[Pre-MVP README](pre_mvp/README.md)**. It contains setup, command-line options, tests, resource considerations and manual acceptance checks.
+
+**Important:** this Python prototype is independent of the C++/RTSP application; it does not replace or integrate with it.
+
+## Validation and known gaps
+
+Automated tests are useful but do not replace testing with the actual webcam and target computer. Before declaring the pre-MVP ready for release, verify:
+
+- webcam capture, requested/actual resolution, and keyboard focus;
+- Space-triggered clips contain the expected pre-event footage and duration;
+- exported MP4 files open and play, with correct duration, resolution and frame rate;
+- preview remains responsive during export;
+- CPU and system/process memory remain acceptable during a prolonged session.
+
+Benchmark scripts and resource-optimization work may exist on separate branches or open pull requests. They should not be considered part of `main` until merged. Run the repository's tests from the project root with:
+
+```powershell
+py -m unittest discover -s tests -v
+```
+
+Run the webcam and export benchmarks described in the relevant benchmark documentation on the target machine; retain measurements so future changes can be compared against a baseline.
+
+## Documentation and roadmap
+
+- [Python pre-MVP setup and usage](pre_mvp/README.md)
+- [Changelog](CHANGELOG.md)
+- [Computer-vision future issue / roadmap](VISION_COMPUTER_VISION_FUTURE.md)
+
+Computer vision is intentionally deferred to a future project issue; it is not a prerequisite for the current webcam-and-Space pre-MVP.
+
+---
+
+## Original C++/RTSP recorder documentation
+
+The sections below document the existing C++ application and its REST API. They are retained as the reference for that application and should not be read as instructions for running the separate Python webcam prototype.
+
 # NVRLite – Lightweight Multi-Camera RTSP NVR
 
 NVRLite is a cross-platform (Win/Linux), lightweight, Qt‑based Network Video Recorder designed to handle multiple RTSP video streams with:

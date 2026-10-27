@@ -22,10 +22,11 @@ Video is encoded by the FFmpeg command-line executable using `libx264` and H.264
 - 30 FPS output
 - JPEG quality 98/100 for frames in the rolling RAM buffer
 - H.264 CRF 18 (lower CRF generally means higher quality and larger files)
-- x264 preset `medium`
+- x264 preset `veryfast` to reduce CPU time during export
+- x264 encoder limited to 2 worker threads by default, to leave more CPU headroom for webcam capture and the rest of the computer
 - 512 MiB rolling-buffer memory cap
 
-The `--h264-crf` option accepts values from 0 to 51. As a practical starting point, CRF 18 is high quality; CRF 20–23 generally reduces file size at some quality cost. CRF 0 is not a guarantee of lossless capture end-to-end because webcam acquisition and the in-memory JPEG buffer are already lossy. The `--h264-preset` option controls encoding speed/compression efficiency: slower presets can reduce file size at similar CRF but use more CPU and take longer to export. Export runs in a background thread, although encoding and JPEG compression can still compete with capture for CPU time.
+The `--h264-crf` option accepts values from 0 to 51. As a practical starting point, CRF 18 is high quality; CRF 20–23 generally reduces file size at some quality cost. CRF 0 is not a guarantee of lossless capture end-to-end because webcam acquisition and the in-memory JPEG buffer are already lossy. The `--h264-preset` option controls encoding speed/compression efficiency: slower presets can reduce file size at similar CRF but use more CPU and take longer to export. The default `veryfast` preset was selected after target-machine testing showed noticeably lower CPU usage with nearly unchanged perceived quality and file size. The `--h264-threads` option caps x264 worker threads (default `2`) so encoding is less likely to monopolize the CPU; this can make exports take longer, which is intentional to protect live capture and overall responsiveness. Export runs in a background thread, although JPEG compression and decoding can still compete with capture for CPU time.
 
 The buffer stores JPEG-compressed frames, not original camera frames, so increasing H.264 quality cannot restore details lost during JPEG compression. Higher camera resolution or JPEG quality increases CPU and RAM requirements. If the RAM cap is reached, the available pre-event window may be shorter than 45 seconds. Actual camera resolution and frame rate depend on the webcam and driver.
 
@@ -67,7 +68,7 @@ python pre_mvp/live_slicer_pre_mvp.py --camera 1
 Example higher-resolution / higher-quality settings:
 
 ```bash
-python pre_mvp/live_slicer_pre_mvp.py --duration 45 --min-clip-seconds 10 --fps 30 --width 1920 --height 1080 --jpeg-quality 100 --h264-crf 16 --h264-preset slow --max-buffer-mib 768 --output recordings
+python pre_mvp/live_slicer_pre_mvp.py --duration 45 --min-clip-seconds 10 --fps 30 --width 1920 --height 1080 --jpeg-quality 100 --h264-crf 16 --h264-preset slow --h264-threads 2 --max-buffer-mib 768 --output recordings
 ```
 
 Useful options:

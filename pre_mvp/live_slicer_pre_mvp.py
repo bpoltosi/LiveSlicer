@@ -108,7 +108,7 @@ def save_clip(frames, trigger_time, duration, fps, output_dir, ffmpeg="ffmpeg",
                 idx += 1
             decoded = cv2.imdecode(eligible[idx][1], cv2.IMREAD_COLOR)
             if decoded is not None and decoded.shape[1::-1] == (width, height):
-                process.stdin.write(decoded.tobytes())
+                process.stdin.write(memoryview(decoded).cast("B"))
                 written += 1
         process.stdin.close()
         return_code = process.wait()

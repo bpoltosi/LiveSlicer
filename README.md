@@ -48,7 +48,10 @@ Run the webcam and export benchmarks described in the relevant benchmark documen
 
 ## Documentation and roadmap
 
+- [Documentation index and repository hygiene policy](docs/README.md)
 - [Python pre-MVP setup and usage](pre_mvp/README.md)
+- [45-second RTSP pre-buffer design and validation](docs/PREBUFFER_45S.md)
+- [Legacy C++ release notes](ReleaseNotes.md)
 - [Changelog](CHANGELOG.md)
 - [Computer-vision future issue / roadmap](VISION_COMPUTER_VISION_FUTURE.md)
 
